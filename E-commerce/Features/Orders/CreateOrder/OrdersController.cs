@@ -31,5 +31,12 @@ namespace E_commerce.Features.Orders.CreateOrder
             if (dto == null) return NotFound();
             return Ok(dto);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> List()
+        {
+            var list = await _mediator.Send(new E_commerce.Features.Orders.GetOrders.GetOrdersQuery());
+            return Ok(list);
+        }
     }
 }

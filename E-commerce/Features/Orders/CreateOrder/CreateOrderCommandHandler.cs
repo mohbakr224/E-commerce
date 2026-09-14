@@ -39,22 +39,21 @@ namespace E_commerce.Features.Orders.CreateOrder
 
             foreach (var item in request.Items)
             {
-                var product = new Products
+                order.Products ??= new System.Collections.Generic.List<Products>();
+                order.Products.Add(new Products
                 {
                     Name = item.Name,
                     Price = item.UnitPrice,
+                    Quantity = item.Quantity,
                     order = order
-                };
-                // Quantity is not modeled on Products in current model; store multiple product rows to represent quantity
-                for (int q = 0; q < item.Quantity; q++)
-                {
-                    order.Products ??= new System.Collections.Generic.List<Products>();
-                    order.Products.Add(new Products { Name = product.Name, Price = product.Price });
-                }
+                });
             }
 
             _db.Orders.Add(order);
             await _db.SaveChangesAsync(cancellationToken);
+
+            // Invalidate cache for this order if distributed cache is used elsewhere (best-effort)
+            // Cache invalidation implemented in request pipeline or after MediatR in controller in later steps if needed.
 
             return order.Id;
         }

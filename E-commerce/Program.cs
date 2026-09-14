@@ -17,6 +17,11 @@ namespace E_commerce
             builder.Services.AddDbContext<ApplicationDB>(opt =>
                 opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
             builder.Services.AddMediatR(typeof(Program).Assembly);
+            builder.Services.AddStackExchangeRedisCache(options =>
+            {
+                options.Configuration = builder.Configuration.GetConnectionString("Redis");
+            });
+            builder.Services.AddHostedService<E_commerce.Background.OrderBackgroundWorker>();
             builder.Services.AddOpenApi();
 
             var app = builder.Build();
