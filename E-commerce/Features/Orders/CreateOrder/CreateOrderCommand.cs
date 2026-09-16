@@ -1,18 +1,10 @@
+﻿using E_commerce.Models;
 using MediatR;
-using System.Collections.Generic;
 
-namespace E_commerce.Features.Orders.CreateOrder
+namespace E_commerce.Features.Order.CreateOrder
 {
-    public class CreateOrderCommand : IRequest<int>
+    public class CreateOrderCommand:IRequest<OrderResponse>
     {
         public int CustomerId { get; set; }
-        public List<OrderItemDto> Items { get; set; } = new List<OrderItemDto>();
-    }
-
-    public class OrderItemDto
-    {
-        public string Name { get; set; }
-        public int Quantity { get; set; }
-        public double UnitPrice { get; set; }
     }
 }

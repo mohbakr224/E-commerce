@@ -7,67 +7,39 @@ using Microsoft.Extensions.DependencyInjection;
 using E_commerce.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
+using E_commerce.Models;
+using Hangfire;
 
 namespace E_commerce.Background
 {
-    public class OrderBackgroundWorker : BackgroundService
+    public class OrderBackgroundWorker
     {
-        private readonly IServiceProvider _provider;
-        private readonly ILogger<OrderBackgroundWorker> _logger;
-        private readonly TimeSpan _interval = TimeSpan.FromSeconds(30);
+        private readonly ApplicationDB _applicationDB;
 
-        public OrderBackgroundWorker(IServiceProvider provider, ILogger<OrderBackgroundWorker> logger)
+        public OrderBackgroundWorker(ApplicationDB applicationDB)
         {
-            _provider = provider;
-            _logger = logger;
+            _applicationDB = applicationDB;
         }
-
-        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+        public async Task GetOrderBackgroud()
         {
-            _logger.LogInformation("OrderBackgroundWorker started.");
-            while (!stoppingToken.IsCancellationRequested)
+            var orders=await _applicationDB.Orders.Include(o => o.Customer).Include(o=>o.Products).ToListAsync();
+            await _applicationDB.SaveChangesAsync();
+            _applicationDB.DashboardOrders.RemoveRange(_applicationDB.DashboardOrders);
+            IList<DashboardOrder> dashboards = new List<DashboardOrder>();
+
+            foreach (var o in orders)
             {
-                try
+                dashboards.Add(new DashboardOrder()
                 {
-                    using (var scope = _provider.CreateScope())
-                    {
-                        var db = scope.ServiceProvider.GetRequiredService<ApplicationDB>();
-
-                        // Process pending orders -> Completed
-                        var pending = await db.Orders.Where(o => o.Status == Models.OrderStatus.Pending).Include(o => o.Products).Include(o => o.Customer).ToListAsync(stoppingToken);
-                        foreach (var order in pending)
-                        {
-                            order.Status = Models.OrderStatus.Completed;
-                        }
-                        if (pending.Any())
-                        {
-                            await db.SaveChangesAsync(stoppingToken);
-                        }
-
-                        // Refresh materialized view (simple: clear and repopulate)
-                        db.DashboardOrders.RemoveRange(db.DashboardOrders);
-                        await db.SaveChangesAsync(stoppingToken);
-
-                        var dashboard = await db.Orders
-                            .Include(o => o.Customer)
-                            .Include(o => o.Products)
-                            .Select(o => new Models.DashboardOrder { Id = o.Id, CustomerName = o.Customer.Name, ItemCount = o.Products.Sum(p => p.Quantity), Total = o.Products.Sum(p => p.Price * p.Quantity), Status = o.Status.ToString() })
-                            .ToListAsync(stoppingToken);
-
-                        if (dashboard.Any())
-                        {
-                            db.DashboardOrders.AddRange(dashboard);
-                            await db.SaveChangesAsync(stoppingToken);
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in background worker");
-                }
-
-                await Task.Delay(_interval, stoppingToken);
+                    CustomerName = o.Customer.Name,
+                    Total = o.Status == OrderStatus.Completed ? o.Products.Count : 0,
+                    Price = o.Status == OrderStatus.Completed ? (decimal)o.Products.Sum(p => p.Price) : 0m
+                });
             }
+            _applicationDB.DashboardOrders.AddRange(dashboards);
+            _applicationDB.SaveChanges();
+            BackgroundJob.Schedule<OrderBackgroundWorker>(x=>x.GetOrderBackgroud(),TimeSpan.FromSeconds(30)
+                );
         }
     }
 }

@@ -1,5 +1,7 @@
 
+using E_commerce.Background;
 using E_commerce.Data;
+using Hangfire;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,12 +18,12 @@ namespace E_commerce
             builder.Services.AddControllers();
             builder.Services.AddDbContext<ApplicationDB>(opt =>
                 opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+            builder.Services.AddHangfire(config => config.UseSqlServerStorage(builder.Configuration.GetConnectionString("HangfireConnection")));
+            builder.Services.AddHangfireServer();
+            builder.Services.AddScoped<OrderBackgroundWorker>();
+
             builder.Services.AddMediatR(typeof(Program).Assembly);
-            builder.Services.AddStackExchangeRedisCache(options =>
-            {
-                options.Configuration = builder.Configuration.GetConnectionString("Redis");
-            });
-            builder.Services.AddHostedService<E_commerce.Background.OrderBackgroundWorker>();
+
             builder.Services.AddOpenApi();
 
             var app = builder.Build();
@@ -31,14 +33,16 @@ namespace E_commerce
             {
                 app.MapOpenApi();
             }
-
+            app.UseHangfireDashboard("/hangfire");
             app.UseHttpsRedirection();
 
             app.UseAuthorization();
 
 
             app.MapControllers();
-
+            BackgroundJob.Enqueue<OrderBackgroundWorker>(
+                x => x.GetOrderBackgroud()
+                );
             app.Run();
         }
     }
